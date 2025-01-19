@@ -1,0 +1,133 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geoportal Kościołów z Spotlight</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="leaflet-overpass-layer-develop/dist/OverPassLayer.css" />
+  <style>
+    #map {
+      height: 95vh;
+    }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="leaflet-overpass-layer-develop/dist/OverPassLayer.bundle.js"></script>
+<script>
+  // Initialize the map
+  const map = L.map('map', {
+    spotlight: true, // Enable spotlight
+    scrollWheelZoom: true
+  }).setView([52.0, 21.0], 9);
+
+  // Add tile layers
+  const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '© OpenStreetMap contributors'
+  });
+
+  const opentopomapLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17,
+    attribution: '© OpenTopoMap contributors'
+  });
+
+  // Add default layer to the map
+  osmLayer.addTo(map);
+
+  // Add layer control
+  const baseMaps = {
+    "OpenStreetMap": osmLayer,
+    "Opentopomap": opentopomapLayer
+  };
+
+  L.control.layers(baseMaps).addTo(map);
+
+  // Define custom icons for each denomination
+  const icons = {
+    catholic: L.icon({ iconUrl: 'Catholic.png', iconSize: [25, 41], iconAnchor: [12, 41] }),
+    roman_catholic: L.icon({ iconUrl: 'Catholic.png', iconSize: [25, 41], iconAnchor: [12, 41] }),
+    protestant: L.icon({ iconUrl: 'Protestant.png', iconSize: [25, 41], iconAnchor: [12, 41] }),
+    orthodox: L.icon({ iconUrl: 'Orthodox.png', iconSize: [25, 41], iconAnchor: [12, 41] }),
+    baptist: L.icon({ iconUrl: 'Baptist.png', iconSize: [25, 41], iconAnchor: [12, 41] }),
+    lutheran: L.icon({ iconUrl: 'lutheran.webp', iconSize: [25, 41], iconAnchor: [12, 41] }),
+    pentecostal: L.icon({ iconUrl: 'pentecostal.png', iconSize: [25, 41], iconAnchor: [12, 41] }),
+    jehovahs_witness: L.icon({ iconUrl: 'JW.svg', iconSize: [25, 41], iconAnchor: [12, 41] }),
+    default: L.icon({ iconUrl: 'default-icon.png', iconSize: [25, 41], iconAnchor: [12, 41] })
+  };
+
+  // Function to calculate the centroid of a polygon
+  const calculateCentroid = (latlngs) => {
+    let latSum = 0, lngSum = 0, numPoints = latlngs.length;
+    latlngs.forEach(latlng => {
+      latSum += latlng[0];
+      lngSum += latlng[1];
+    });
+    return [latSum / numPoints, lngSum / numPoints];
+  };
+
+  // Initialize OverPassLayer with the query
+  var opl = new L.OverPassLayer({
+    debug: true,
+    minZoom: 9,
+    endPoint: 'https://lz4.overpass-api.de/api/',
+    query: 'area(id:3602907540)->.searchArea;(nwr["amenity"="place_of_worship"]["religion"="christian"](area.searchArea););out body;out geom;',
+    minZoomIndicatorEnabled: true,
+    onSuccess: function(data) {
+      const getMarkerIcon = (denomination) => {
+        return icons[denomination] || icons.default;
+      };
+
+      // Add elements to the map
+      data.elements.forEach(element => {
+        const { tags } = element;
+        const denomination = tags?.denomination || 'unknown';
+        const icon = getMarkerIcon(denomination);
+
+        // Handle nodes
+        if (element.type === 'node') {
+          L.marker([element.lat, element.lon], { icon })
+                  .bindPopup(`
+              <strong>${tags?.name || 'Nieznana nazwa'}</strong><br>
+              Denominacja: ${denomination}<br>
+<!--              Religia: ${tags?.religion || 'Nieznana'}-->
+            `)
+                  .addTo(map);
+        }
+
+        // Handle ways and relations
+        if ((element.type === 'way' || element.type === 'relation') && element.geometry) {
+          const latlngs = element.geometry.map(coord => [coord.lat, coord.lon]);
+          L.polygon(latlngs, {
+            color: icon.options.iconUrl,
+            weight: 2,
+            fillOpacity: 0.4
+          })
+                  .bindPopup(`
+              <strong>${tags?.name || 'Nieznana nazwa'}</strong><br>
+              Denominacja: ${denomination}<br>
+<!--              Religia: ${tags?.religion || 'Nieznana'}-->
+            `)
+                  .addTo(map);
+
+          // Add a marker at the centroid of the polygon
+          const centroid = calculateCentroid(latlngs);
+          L.marker(centroid, { icon })
+                  .bindPopup(`
+              <strong>${tags?.name || 'Nieznana nazwa'}</strong><br>
+              Denominacja: ${denomination}<br>
+<!--              Religia: ${tags?.religion || 'Nieznana'}-->
+            `)
+                  .addTo(map);
+        }
+      });
+    }
+  });
+
+  // Add OverPassLayer to the map
+  map.addLayer(opl);
+</script>
+</body>
+</html>
